@@ -1,0 +1,218 @@
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <title>OpenLayers Map</title>
+
+    <!-- OpenLayers base script -->
+    <script src="https://www.openlayers.org/api/OpenLayers.js"></script>
+    <script type="text/javascript">
+      //<![CDATA[
+
+      var map;
+      var mercator = new OpenLayers.Projection("EPSG:900913");
+      var geographic = new OpenLayers.Projection("EPSG:4326");
+      var markers;
+      var fromPoint;
+      var toPoint;
+      var numClicks = 0;
+      var routinoURL = "/routino/"; // "http://ksg.eti.pg.gda.pl/routino/www/routino/"
+      var vectorLayer = null;
+
+      var line_style = {
+        strokeColor: "#0000EE",
+        strokeOpacity: 0.7,
+        strokeWidth: 4,
+        pointRadius: 6,
+        pointerEvents: "visiblePainted",
+      };
+
+      // Task 1: addMarker function extracted from the inline marker code
+      function addMarker(lonlat, popupContentHTML) {
+        var feature = new OpenLayers.Feature(markers, lonlat);
+        feature.closeBox = true;
+        feature.popupClass = OpenLayers.Popup.FramedCloud;
+        feature.data.popupContentHTML = popupContentHTML;
+        feature.data.overflow = "auto";
+
+        var marker = feature.createMarker();
+
+        var markerClick = function (evt) {
+          if (this.popup == null) {
+            this.popup = this.createPopup(this.closeBox);
+            map.addPopup(this.popup);
+            this.popup.show();
+          } else {
+            this.popup.toggle();
+          }
+          currentPopup = this.popup;
+          OpenLayers.Event.stop(evt);
+        };
+        marker.events.register("mousedown", feature, markerClick);
+
+        markers.addMarker(marker);
+      }
+
+      // Task 2: Click control class for extracting coordinates of clicked locations
+      OpenLayers.Control.Click = OpenLayers.Class(OpenLayers.Control, {
+        defaultHandlerOptions: {
+          single: true,
+          double: false,
+          pixelTolerance: 0,
+          stopSingle: false,
+          stopDouble: false,
+        },
+
+        initialize: function (options) {
+          this.handlerOptions = OpenLayers.Util.extend(
+            {},
+            this.defaultHandlerOptions,
+          );
+
+          OpenLayers.Control.prototype.initialize.apply(this, arguments);
+
+          this.handler = new OpenLayers.Handler.Click(
+            this,
+            {
+              click: this.trigger,
+            },
+            this.handlerOptions,
+          );
+        },
+
+        trigger: function (e) {
+          var lonlat = map.getLonLatFromViewPortPx(e.xy);
+          numClicks++;
+          // Task 3: call getLocationData instead of alert
+          getLocationData(lonlat.lon, lonlat.lat);
+        },
+      });
+
+      // Task 3: getLocationData function - places markers and triggers routing
+      function getLocationData(lon, lat) {
+        if (numClicks == 1) {
+          // Start point: clear existing markers, add start marker, save geographic coords
+          markers.clearMarkers();
+          addMarker(new OpenLayers.LonLat(lon, lat), "Start point");
+          fromPoint = new OpenLayers.LonLat(lon, lat).transform(
+            mercator,
+            geographic,
+          );
+        } else if (numClicks == 2) {
+          // End point: add end marker, save geographic coords, request route
+          addMarker(new OpenLayers.LonLat(lon, lat), "End point");
+          toPoint = new OpenLayers.LonLat(lon, lat).transform(
+            mercator,
+            geographic,
+          );
+          getRoute(fromPoint, toPoint);
+          numClicks = 0;
+        } else {
+          numClicks = 0;
+        }
+      }
+
+      // Task 4: getRoute function - queries Routino for a route UUID
+      function getRoute(fromPoint, toPoint) {
+        var request = new XMLHttpRequest();
+        var url =
+          routinoURL +
+          "router.cgi?transport=motorcar;lon1=" +
+          fromPoint.lon +
+          ";lat1=" +
+          fromPoint.lat +
+          ";lon2=" +
+          toPoint.lon +
+          ";lat2=" +
+          toPoint.lat +
+          ";language=en;type=shortest";
+
+        request.onreadystatechange = function () {
+          if (this.readyState == 4 && this.status == 200) {
+            var result = request.responseText;
+            var uuid = result.substring(0, result.length - 4);
+            // Task 4: display the route polyline instead of just alerting
+            getRoutePolyline(uuid);
+          }
+        };
+        request.open("GET", url, true);
+        request.send();
+      }
+
+      // Task 4: getRoutePolyline function - downloads GPX track and draws it as a vector layer
+      function getRoutePolyline(result) {
+        var url =
+          routinoURL +
+          "results.cgi?uuid=" +
+          result +
+          ";type=shortest;format=gpx-track";
+
+        // Remove previous vector layer if it exists
+        if (vectorLayer != null) {
+          vectorLayer.destroy();
+          vectorLayer = null;
+        }
+
+        vectorLayer = new OpenLayers.Layer.Vector("Routes", {
+          protocol: new OpenLayers.Protocol.HTTP({
+            url: url,
+            format: new OpenLayers.Format.GPX(),
+          }),
+          strategies: [new OpenLayers.Strategy.Fixed()],
+          projection: map.displayProjection,
+          style: line_style,
+        });
+        map.addLayer(vectorLayer);
+
+        // Place vectorLayer below the markers layer so markers remain clickable
+        map.setLayerIndex(vectorLayer, map.getLayerIndex(markers) - 1);
+      }
+
+      function init() {
+        var options = {
+          projection: mercator,
+          displayProjection: geographic,
+          units: "m",
+          maxResolution: 156543.0339,
+          maxExtent: new OpenLayers.Bounds(
+            -20037508.34,
+            -20037508.34,
+            20037508.34,
+            20037508.34,
+          ),
+        };
+        map = new OpenLayers.Map("map", options);
+
+        var osm = new OpenLayers.Layer.OSM();
+
+        markers = new OpenLayers.Layer.Markers("points");
+
+        map.addLayer(osm);
+
+        map.addLayer(markers);
+
+        map.addControl(new OpenLayers.Control.LayerSwitcher());
+        map.addControl(new OpenLayers.Control.MousePosition());
+
+        map.setCenter(
+          new OpenLayers.LonLat(10.2, 48.9).transform(geographic, mercator),
+          5,
+        );
+
+        // Task 1: use addMarker instead of inline marker code
+        addMarker(
+          new OpenLayers.LonLat(20, 50).transform(geographic, mercator),
+          "Jestem Markerem.",
+        );
+
+        // Task 2: instantiate the click control, add to map and activate it
+        var click = new OpenLayers.Control.Click();
+        map.addControl(click);
+        click.activate();
+      }
+
+      //]]>
+    </script>
+  </head>
+  <body onload="init()">
+    <div id="map"></div>
+  </body>
+</html>
