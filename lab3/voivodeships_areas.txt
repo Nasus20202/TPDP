@@ -1,0 +1,17 @@
+id	name	area_km2
+0	Łódzkie	18505.45
+1	Świętokrzyskie	11673.64
+2	Wielkopolskie	29603.50
+3	Kujawsko-Pomorskie	17750.57
+4	Małopolskie	15226.86
+5	Dolnośląskie	19361.24
+6	Lubelskie	24665.74
+7	Lubuskie	13961.91
+8	Mazowieckie	34981.44
+9	Opolskie	9090.61
+10	Podlaskie	21582.45
+11	Pomorskie	18251.74
+12	Śląskie	12071.13
+13	Podkarpackie	17759.24
+14	Warmińsko-Mazurskie	23857.34
+15	Zachodniopomorskie	23605.67

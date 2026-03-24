@@ -1,0 +1,1 @@
+# Technologie przetwarzania danych przestrzennych
