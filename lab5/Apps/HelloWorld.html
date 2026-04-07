@@ -27,8 +27,158 @@
   </head>
   <body>
     <div id="cesiumContainer"></div>
-    <script>
-      const viewer = new Cesium.Viewer("cesiumContainer");
+    <script async>
+      Cesium.Ion.defaultAccessToken =
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI0OWJiMzMzNi1lMDFiLTRhYjQtYThiZS1hMDBkNjU2MGM5NDAiLCJpZCI6NDE1MDQxLCJpYXQiOjE3NzU1OTEzMzl9.AfAwZ7qEiAn8e7dVNqPIHk0NyuFfDfZSJST1UrrxYgI";
+      async function main() {
+        // 1.
+        const viewer = new Cesium.Viewer("cesiumContainer");
+
+        // 2.
+        const poland = viewer.entities.add({
+          name: "Poland",
+          polygon: {
+            hierarchy: Cesium.Cartesian3.fromDegreesArray([
+              18.338667, 54.820366, 18.720155, 54.386322, 22.875648, 54.378387,
+              23.938365, 52.710955, 23.175389, 52.254606, 23.665873, 52.037227,
+              24.060986, 50.451036, 22.848399, 49.042572, 19.919117, 49.238664,
+              16.730968, 50.137695, 14.878027, 50.900002, 14.264922, 53.923576,
+            ]),
+            material: Cesium.Color.WHITE.withAlpha(0.5),
+            outline: true,
+            outlineColor: Cesium.Color.BLACK,
+          },
+        });
+
+        const espana = viewer.entities.add({
+          position: Cesium.Cartesian3.fromDegrees(-3.695879, 40.407174),
+          ellipse: {
+            semiMinorAxis: 250000.0,
+            semiMajorAxis: 400000.0,
+            material: Cesium.Color.BLUE.withAlpha(0.5),
+          },
+        });
+        espana.ellipse.material = "espana.png";
+        const borgCube = viewer.entities.add({
+          name: "Borg Cube",
+          position: Cesium.Cartesian3.fromDegrees(2.3488, 48.85341, 250000.0),
+          box: {
+            dimensions: new Cesium.Cartesian3(300000.0, 300000.0, 300000.0),
+          },
+        });
+        borgCube.box.material = "borg-cube.jpg";
+
+        const lineBerlinWarsaw = new Cesium.GeometryInstance({
+          geometry: new Cesium.PolylineGeometry({
+            positions: Cesium.Cartesian3.fromDegreesArrayHeights([
+              13.41053, 52.52437, 0.0, 21.01178, 52.22977, 0.0,
+            ]),
+            vertexFormat: Cesium.PolylineColorAppearance.VERTEX_FORMAT,
+            width: 3.0,
+            arcType: Cesium.ArcType.NONE,
+          }),
+          attributes: {
+            color: Cesium.ColorGeometryInstanceAttribute.fromColor(
+              Cesium.Color.LIME,
+            ),
+          },
+        });
+
+        viewer.scene.primitives.add(
+          new Cesium.Primitive({
+            geometryInstances: lineBerlinWarsaw,
+            appearance: new Cesium.PolylineColorAppearance(),
+          }),
+        );
+
+        // 3
+        const blackMarbleProvider =
+          await Cesium.IonImageryProvider.fromAssetId(3812);
+        const blackMarble =
+          viewer.imageryLayers.addImageryProvider(blackMarbleProvider);
+        blackMarble.alpha = 0.5;
+        blackMarble.brightness = 2.0;
+
+        // 4.
+        const terrainProvider = Cesium.Terrain.fromWorldTerrain({
+          requestVertexNormals: true,
+          requestWaterMask: true,
+        });
+        viewer.scene.setTerrain(terrainProvider);
+        viewer.scene.globe.enableLighting = true;
+
+        // 5.
+        const car = viewer.entities.add({
+          position: Cesium.Cartesian3.fromDegrees(18.59058, 54.38783, 50.0),
+          model: {
+            uri: "SampleData/models/GroundVehicle/GroundVehicle.glb",
+            scale: 200.0,
+          },
+        });
+
+        await viewer.zoomTo([poland, espana, borgCube]);
+
+        // Task 2
+        viewer.entities.add({
+          name: "Borg Beam to Gdansk",
+          polyline: {
+            positions: new Cesium.CallbackProperty(function (time) {
+              return [
+                borgCube.position.getValue(time),
+                car.position.getValue(time),
+              ];
+            }, false),
+            width: 12.0,
+            arcType: Cesium.ArcType.NONE,
+            material: new Cesium.PolylineGlowMaterialProperty({
+              glowPower: 0.35,
+              color: Cesium.Color.LIME,
+            }),
+          },
+        });
+
+        // Task 3
+        const orbitDurationSeconds = 360.0;
+        viewer.clock.shouldAnimate = true;
+        viewer.clock.multiplier = 60.0;
+
+        const balloonStart = Cesium.JulianDate.now();
+        viewer.clock.startTime = balloonStart.clone();
+        viewer.clock.stopTime = Cesium.JulianDate.addSeconds(
+          balloonStart,
+          orbitDurationSeconds,
+          new Cesium.JulianDate(),
+        );
+        viewer.clock.currentTime = balloonStart.clone();
+        viewer.clock.clockRange = Cesium.ClockRange.LOOP_STOP;
+
+        const balloonPosition = new Cesium.CallbackPositionProperty(function (
+          time,
+        ) {
+          const orbitPhase =
+            Cesium.JulianDate.secondsDifference(time, balloonStart) /
+            orbitDurationSeconds;
+          const lon = orbitPhase * 360.0 - 180.0;
+          const lat = Math.sin(orbitPhase * Cesium.Math.TWO_PI * 2.0) * 28.0;
+          const height =
+            180000.0 + Math.sin(orbitPhase * Cesium.Math.TWO_PI) * 20000.0;
+
+          return Cesium.Cartesian3.fromDegrees(lon, lat, height);
+        }, false);
+
+        viewer.entities.add({
+          name: "Balloon",
+          position: balloonPosition,
+          orientation: new Cesium.VelocityOrientationProperty(balloonPosition),
+          model: {
+            uri: "SampleData/models/CesiumBalloon/CesiumBalloon.glb",
+            scale: 1.0,
+            minimumPixelSize: 96,
+          },
+        });
+      }
+
+      main();
     </script>
   </body>
 </html>
